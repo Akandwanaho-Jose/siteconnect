@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "653303642290",
+    "project_id": "siteconnect-uganda",
+    "storage_bucket": "siteconnect-uganda.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:653303642290:android:1c6db26ef622e7a1fe31ab",
+        "android_client_info": {
+          "package_name": "com.example.siteconnect"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjKv-3fE18BMIWTbaKL6cOOUb1UJZu4qc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
