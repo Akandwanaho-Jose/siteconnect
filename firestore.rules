@@ -1,0 +1,276 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function projectPath(projectId) {
+      return /databases/$(database)/documents/projects/$(projectId);
+    }
+
+    function reportPath(reportId) {
+      return /databases/$(database)/documents/site_reports/$(reportId);
+    }
+
+    function projectMemberPath(projectId, userId) {
+      return /databases/$(database)/documents/project_members/$(projectId + '_' + userId);
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(userPath(request.auth.uid));
+    }
+
+    function currentUser() {
+      return get(userPath(request.auth.uid)).data;
+    }
+
+    function hasRole(role) {
+      return hasProfile() && currentUser().role == role;
+    }
+
+    function isAdmin() {
+      return hasRole('administrator');
+    }
+
+    function isProjectManager() {
+      return hasRole('project_manager');
+    }
+
+    function isDistrictEngineer() {
+      return hasRole('district_engineer');
+    }
+
+    function canManageAnnouncements() {
+      return isAdmin() || isProjectManager() || isDistrictEngineer();
+    }
+
+    function ownsExistingRecord() {
+      return signedIn() && resource.data.createdBy == request.auth.uid;
+    }
+
+    function ownsNewRecord() {
+      return signedIn() && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    function ownsProfile(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function managesProject(projectId) {
+      return isProjectManager() &&
+        exists(projectPath(projectId)) &&
+        (
+          get(projectPath(projectId)).data.projectManagerId == request.auth.uid ||
+          get(projectPath(projectId)).data.createdBy == request.auth.uid
+        );
+    }
+
+    function reviewsDistrictProject(projectId) {
+      return isDistrictEngineer() &&
+        exists(projectPath(projectId)) &&
+        (
+          currentUser().district == '' ||
+          get(projectPath(projectId)).data.district == '' ||
+          currentUser().district == get(projectPath(projectId)).data.district ||
+          (
+            exists(projectMemberPath(projectId, request.auth.uid)) &&
+            get(projectMemberPath(projectId, request.auth.uid)).data.role == 'district_engineer' &&
+            get(projectMemberPath(projectId, request.auth.uid)).data.status == 'active'
+          )
+        );
+    }
+
+    function reportReceiptChangedOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'status',
+        'updatedAt',
+        'reviewFeedback',
+        'receivedAt',
+        'receivedBy'
+      ]) &&
+      (
+        request.resource.data.status == resource.data.status ||
+        request.resource.data.status == 'received'
+      );
+    }
+
+    function reportWriterStatusAllowed() {
+      return request.resource.data.status == 'draft' ||
+        request.resource.data.status == 'submitted';
+    }
+
+    function reportWriterCanUpdate() {
+      return ownsExistingRecord() &&
+        resource.data.status == 'draft' &&
+        reportWriterStatusAllowed();
+    }
+
+    function canUseReportThread(reportId, projectId) {
+      return signedIn() &&
+        exists(reportPath(reportId)) &&
+        get(reportPath(reportId)).data.projectId == projectId &&
+        (
+          isAdmin() ||
+          managesProject(projectId) ||
+          reviewsDistrictProject(projectId) ||
+          get(reportPath(reportId)).data.createdBy == request.auth.uid
+        );
+    }
+
+    function validNewReportComment(commentId) {
+      return hasProfile() &&
+      request.resource.data.keys().hasOnly([
+        'id',
+        'reportId',
+        'projectId',
+        'body',
+        'createdBy',
+        'authorName',
+        'authorRole',
+        'createdAt',
+        'updatedAt'
+      ]) &&
+      request.resource.data.reportId is string &&
+      request.resource.data.projectId is string &&
+      request.resource.data.body is string &&
+      request.resource.data.body.size() > 0 &&
+      request.resource.data.id == commentId &&
+      request.resource.data.createdBy == request.auth.uid &&
+      request.resource.data.authorRole == currentUser().role &&
+      canUseReportThread(
+        request.resource.data.reportId,
+        request.resource.data.projectId
+      );
+    }
+
+    function onlyOwnProfileBasicsChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'fullName',
+        'phoneNumber',
+        'district',
+        'profileImage',
+        'updatedAt'
+      ]);
+    }
+
+    match /roles/{roleId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /system_settings/{settingId} {
+      allow read: if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn() &&
+        (isAdmin() || isProjectManager() || request.auth.uid == userId);
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() ||
+        (ownsProfile(userId) && onlyOwnProfileBasicsChanged());
+    }
+
+    match /projects/{projectId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin() || isProjectManager();
+    }
+
+    match /project_members/{memberId} {
+      allow read: if signedIn();
+      allow create: if isAdmin() ||
+        managesProject(request.resource.data.projectId);
+      allow update, delete: if isAdmin() || managesProject(resource.data.projectId);
+    }
+
+    match /site_reports/{reportId} {
+      allow read: if signedIn();
+      allow create: if ownsNewRecord();
+      allow update: if reportWriterCanUpdate() ||
+        (managesProject(resource.data.projectId) && reportWriterStatusAllowed()) ||
+        (
+          reviewsDistrictProject(resource.data.projectId) &&
+          reportReceiptChangedOnly()
+        );
+      allow delete: if managesProject(resource.data.projectId) || ownsExistingRecord();
+    }
+
+    match /announcements/{announcementId} {
+      allow read: if signedIn();
+      allow create: if canManageAnnouncements() &&
+        request.resource.data.id == announcementId &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update: if canManageAnnouncements();
+      allow delete: if false;
+    }
+
+    match /announcement_comments/{commentId} {
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        request.resource.data.id == commentId &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if false;
+    }
+
+    match /announcement_reactions/{reactionId} {
+      allow read: if signedIn();
+      allow create: if signedIn() &&
+        request.resource.data.id == reactionId &&
+        request.resource.data.createdBy == request.auth.uid;
+      allow update: if false;
+      allow delete: if signedIn() && resource.data.createdBy == request.auth.uid;
+    }
+
+    match /report_comments/{commentId} {
+      allow read: if signedIn();
+      allow create: if validNewReportComment(commentId);
+      allow update, delete: if false;
+    }
+
+    match /report_photos/{photoId} {
+      allow read: if signedIn();
+      allow create: if ownsNewRecord();
+      allow update, delete: if isAdmin() || isProjectManager() || ownsExistingRecord();
+    }
+
+    match /documents/{documentId} {
+      allow read: if signedIn();
+      allow create: if ownsNewRecord();
+      allow update, delete: if isAdmin() || isProjectManager() || ownsExistingRecord();
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() &&
+        (isAdmin() || resource.data.recipientUserId == request.auth.uid);
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /environmental_reports/{reportId} {
+      allow read: if signedIn();
+      allow create: if ownsNewRecord();
+      allow update, delete: if isAdmin() || isProjectManager() || ownsExistingRecord();
+    }
+
+    match /community_feedback/{feedbackId} {
+      allow read: if signedIn();
+      allow create: if signedIn();
+      allow update, delete: if isAdmin() || isProjectManager() || ownsExistingRecord();
+    }
+
+    match /meetings/{meetingId} {
+      allow read: if signedIn();
+      allow create: if ownsNewRecord();
+      allow update, delete: if isAdmin() || isProjectManager() || ownsExistingRecord();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

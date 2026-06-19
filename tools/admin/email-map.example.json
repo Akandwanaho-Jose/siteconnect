@@ -1,0 +1,46 @@
+[
+  {
+    "from": "siteconnect.administrator@siteconnect.test",
+    "to": "administrator@example.com"
+  },
+  {
+    "from": "siteconnect.project-manager@siteconnect.test",
+    "to": "project.manager@example.com"
+  },
+  {
+    "from": "siteconnect.site-engineer@siteconnect.test",
+    "to": "site.engineer@example.com"
+  },
+  {
+    "from": "siteconnect.contractor@siteconnect.test",
+    "to": "contractor@example.com"
+  },
+  {
+    "from": "siteconnect.consultant@siteconnect.test",
+    "to": "consultant@example.com"
+  },
+  {
+    "from": "siteconnect.clerk-of-works@siteconnect.test",
+    "to": "clerk.of.works@example.com"
+  },
+  {
+    "from": "siteconnect.district-engineer@siteconnect.test",
+    "to": "district.engineer@example.com"
+  },
+  {
+    "from": "siteconnect.procurement-officer@siteconnect.test",
+    "to": "procurement.officer@example.com"
+  },
+  {
+    "from": "siteconnect.community-representative@siteconnect.test",
+    "to": "community.representative@example.com"
+  },
+  {
+    "from": "siteconnect.environment-officer@siteconnect.test",
+    "to": "environment.officer@example.com"
+  },
+  {
+    "from": "siteconnect.community-development-officer@siteconnect.test",
+    "to": "community.development.officer@example.com"
+  }
+]
